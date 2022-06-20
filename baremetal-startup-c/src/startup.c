@@ -1,54 +1,21 @@
-/*
-   Simple C++ startup routine to setup CRT
-   SPDX-License-Identifier: Unlicense
-
-   (https://five-embeddev.com/ | http://www.shincbm.com/) 
-
-*/
-
 #include <stdint.h>
 #include <string.h>
 
-// Generic C function pointer.
-typedef void (*function_t)();
+extern void *bss_target_start;
+extern void *bss_target_end;
+extern const void *data_source_start;
+extern void *data_target_start;
+extern void *data_target_end;
 
-// These symbols are defined by the linker script.
-// See linker.lds
-extern void *metal_segment_bss_target_start;
-extern void *metal_segment_bss_target_end;
-extern const void *metal_segment_data_source_start;
-extern void *metal_segment_data_target_start;
-extern void *metal_segment_data_target_end;
-extern const void *metal_segment_itim_source_start;
-extern void *metal_segment_itim_target_start;
-extern void *metal_segment_itim_target_end;
-
-extern function_t __init_array_start[];
-extern function_t __init_array_end[];
-
-// This function will be placed by the linker script according to the section
-// Raw function 'called' by the CPU with no runtime.
 extern void _enter(void)  __attribute__ ((naked, section(".text.metal.init.enter")));
 
-// Entry and exit points as C functions.
-extern void _start(void) __attribute__ ((noreturn));
-void _Exit(int exit_code) __attribute__ ((noreturn));
+extern void _start(void);
 
-// Standard entry point, no arguments.
 extern int main(void);
 
-// The linker script will place this in the reset entry point.
-// It will be 'called' with no stack or C runtime configuration.
-// NOTE - this only supports a single hart.
-// tp will not be initialized
 void _enter(void) {
-    // Setup SP and GP
-    // The locations are defined in the linker script
     __asm__ volatile  (
         ".option push;"
-        // The 'norelax' option is critical here.
-        // Without 'norelax' the global pointer will
-        // be loaded relative to the global pointer!
          ".option norelax;"
         "la    gp, __global_pointer$;"
         ".option pop;"
@@ -56,41 +23,30 @@ void _enter(void) {
         "jal   zero, _start;"
         :  /* output: none %0 */
         : /* input: none */
-        : /* clobbers: none */); 
-    // This point will not be executed, _start() will be called with no return.
+        : /* clobbers: none */);
 }
 
-// At this point we have a stack and global poiner, but no access to global variables.
-void _start(void) {
+void _start(void){
 
-    // Init memory regions
-    // Clear the .bss section (global variables with no initial values)
-    memset(metal_segment_bss_target_start,
-           0, 
-           (metal_segment_bss_target_end - metal_segment_bss_target_start));
+    //setting .bss to 0
+    uint64_t bss_size = &bss_target_end - &bss_target_start;
 
-    // Initialize the .data section (global variables with initial values)
-    memcpy(metal_segment_data_target_start,
-           metal_segment_data_source_start,
-           (metal_segment_data_target_end-metal_segment_data_target_start));
+    uint64_t *byteTrg = (uint64_t*) &bss_target_start;
 
-    // Initialize the .itim section (code moved from flash to SRAM to improve performance)
-    memcpy(metal_segment_itim_target_start,
-           metal_segment_itim_source_start,
-           (metal_segment_itim_target_start-metal_segment_itim_target_end));
-
-    // Call constructors
-    for (unsigned int i=0; i< (__init_array_start-__init_array_end)/sizeof(function_t); i++) {
-        __init_array_start[i]();
+    for (uint64_t i=0; i<bss_size; i++){
+          *byteTrg++ = 0;
     }
 
-    _Exit(main());
+    //copying .data from rom 
+    uint64_t data_size = &data_target_end - &data_target_start;
+    uint64_t *dataTrg = (uint64_t*) &data_target_start;
+    uint64_t *dataSrc = (uint64_t*) &data_source_start;
+
+    for (uint64_t i=0; i<data_size; i++){
+          *dataTrg++ = *dataSrc++;
+    }
+
+    main();
+
 }
 
-// This should never be called. Busy loop with the CPU in idle state.
-void _Exit(int exit_code) {
-    // Halt
-    while (1) {
-        __asm__ volatile ("wfi");
-    }
-}
