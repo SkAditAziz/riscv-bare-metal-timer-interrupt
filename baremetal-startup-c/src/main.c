@@ -1,66 +1,43 @@
-/*
-   Baremetal main program with timer interrupt.
-   SPDX-License-Identifier: Unlicense
-
-   https://five-embeddev.com/
-
-   Tested with sifive-hifive-revb, but should not have any
-   dependencies to any particular implementation.
-   
-*/
-// RISC-V CSR definitions and access classes
 #include "riscv-csr.h"
 #include "riscv-interrupts.h"
 #include "timer.h"
 
-// Machine mode interrupt service routine
 static void irq_entry(void) __attribute__ ((interrupt ("machine")));
 
-// Global to hold current timestamp
-static volatile uint64_t timestamp = 0;
+int interrup_cnt = 0;
 
 int main(void) {
-    // Global interrupt disable
-    csr_clr_bits_mstatus(MSTATUS_MIE_BIT_MASK);
-    csr_write_mie(0);
 
-    // Setup timer for 1 second interval
-    timestamp = mtimer_get_raw_time();
-    mtimer_set_raw_time_cmp(MTIMER_SECONDS_TO_CLOCKS(1));
+    csr_clr_bits_mstatus(MSTATUS_MIE_BIT_MASK); // csrrc mstatus,0x8
+    csr_write_mie(0);   //csrw    mie, 0
+
+    mtimer_set_raw_time_cmp(MTIMER_SECONDS_TO_CLOCKS(1)); // MTIMECMP = MTIME + 1
+
+    csr_write_mtvec((uint_xlen_t) irq_entry); // csrw mtvec, irq_handler addr
     
-    // Setup the IRQ handler entry point
-    csr_write_mtvec((uint_xlen_t) irq_entry);
+    csr_set_bits_mie(MIE_MTI_BIT_MASK); //enabling timer int setting no 7 bit
 
-    // Enable MIE.MTI
-    csr_set_bits_mie(MIE_MTI_BIT_MASK);
+    csr_set_bits_mstatus(MSTATUS_MIE_BIT_MASK); //csrrs mstatus,0x8
 
-    // Global interrupt enable 
-    csr_set_bits_mstatus(MSTATUS_MIE_BIT_MASK);
-
-    // Busy loop
     do {
-        __asm__ volatile ("wfi");  
+        __asm__ volatile ("wfi");
+        //use nop
     } while (1);
-    
+
     return 0;
 
 }
 
-#pragma GCC push_options
-// Force the alignment for mtvec.BASE. A 'C' extension program could be aligned to to bytes.
-#pragma GCC optimize ("align-functions=4")
 static void irq_entry(void)  {
     uint_xlen_t this_cause = csr_read_mcause();
     if (this_cause &  MCAUSE_INTERRUPT_BIT_MASK) {
         this_cause &= 0xFF;
-        // Known exceptions
         switch (this_cause) {
         case RISCV_INT_MASK_MTI :
-            // Timer exception, keep up the one second tick.
             mtimer_set_raw_time_cmp(MTIMER_SECONDS_TO_CLOCKS(1));
-            timestamp = mtimer_get_raw_time();
+            interrup_cnt++;// a counter to keep track of how many time int has been called
             break;
         }
     }
-}
-#pragma GCC pop_options
+}   
+
