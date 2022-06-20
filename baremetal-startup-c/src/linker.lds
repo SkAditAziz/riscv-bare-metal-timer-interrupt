@@ -24,7 +24,7 @@ SECTIONS
     __heap_size = 0x800;
 
     .init : {
-        KEEP (*(.text.metal.init.enter))
+        KEEP (*(.init.enter))
     } >rom :rom
 
     .text : {

@@ -7,7 +7,7 @@ extern const void *data_source_start;
 extern void *data_target_start;
 extern void *data_target_end;
 
-extern void _enter(void)  __attribute__ ((naked, section(".text.metal.init.enter")));
+extern void _enter(void)  __attribute__ ((naked, section(".init.enter")));
 
 extern void _start(void);
 
