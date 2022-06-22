@@ -8,10 +8,7 @@ SPIKEFLAGE=--log-commits -l -m0x80000000
 CFLAGS= -march=$(MARCH) -mabi=$(MABI) -mcmodel=medany -std=c99 -Og -Wall -ffunction-sections
 LDFLAGS= $(CFLAGS) -nostartfiles -T linker.lds -Wl,-Map=main.map
     
-all:main.c.o startup.c.o timer.c.o #main.o.dump startup.o.dump main.elf
-dump:main.o.dump startup.o.dump timer.o.dump main.dump
-elf:main.elf
-asm:main.s
+all:main.elf main.dump main.s
 log:main.log
 
 main.c.o:main.c
